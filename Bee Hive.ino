@@ -1,171 +1,54 @@
-#include <Adafruit_Sensor.h>           //In order to use DHT sensor we have to include this library first 
-#define BLYNK_PRINT Serial  
-//___________________Include Libraries_________________________________________________________
-#include <DHT.h>                      //Including the DHT library
-#include <ESP8266WiFi.h>              //Including the ESP8266 WiFi library in order to usm them
-#include <BlynkSimpleEsp8266.h>       //library for linking up Blynk with ESP8266
-#include <Wire.h>                     //For using I2C connection of BMP180 in order to connect it to the board
-#include <Adafruit_BMP085.h>          //Including the library for BMP180
-Adafruit_BMP085 bmp;                  //Defining the object bmp
-#define I2C_SCL 12                    //Connect SCL pin of BMP180 to GPIO12(D6) of Nodemcu
-#define I2C_SDA 13                    //Connect SDA pin of BMP180 to GPIO13(D7) of Nodemcu
-int audio_signal = A0;
-int RS=0; //variable to store RainDrop Sensor Module's output value
+//Bee_hive_28072020.ino
+#define BLYNK_PRINT Serial
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+#include <BMP180MI.h>
+#define I2C_ADDRESS 0x77
+BMP180I2C bmp180(I2C_ADDRESS);
 
-float dst,bt,bp,ba;
-char dstmp[20],btmp[20],bprs[20],balt[20];
-bool bmp085_present=true;
-
-char auth[] = "5KmqoSVW1wPPzukyXAnq45qGBacmUjF9"; //clint_1 ID  //Authentication Key will be there in the Blynk App
-//bridge1.setAuthToken("6UqgH13ON98rLmxl3b2mO89xjJUoIIG1 "); // server ID
-//________________________Mention the SSID and Password____________________________________________________
-
-char ssid[] = "new"; //SSID of the WiFi hotspot available
-char pass[] = "12345678";  //Password of the WiFi
-
-#define DHTPIN 2                                    //Connect the DHT11 sensor's data pin to GPIO2(D4) of Nodemcu    
-#define DHTTYPE DHT11                               //Mention the type of sensor we are using, Here it it DHT11, for DHT22 just replace DHT11 with DHT22
-
-DHT dht(DHTPIN, DHTTYPE); //Defining the pin and the dhttype
-
-BlynkTimer timer;
-void sendSensor()
-{
-//______________________________Check the working of BMP180 sensor________________________________________
-          if (!bmp.begin()) 
-          {
-              Serial.println("Could not find a valid BMP085 sensor, check wiring!");
-              while (1) {}
-          }
-  
-//______________________Getting the Humidity and temperature value from DHT11____________________________
-  
-          float h = dht.readHumidity();
-          
-          float t = dht.readTemperature(); // or dht.readTemperature(true) for Fahrenheit
-
-
-//______________________________Check the working of DHT11 sensor________________________________________
-  
-          if (isnan(h) || isnan(t)) 
-          {
-              Serial.println("Failed to read from DHT sensor!");
-              return;
-          }
-
-//______________________________Measuring the Dew Point______________________________________________________
-
-          double gamma = log(h/100) + ((17.62*t) / (243.5+t));
-          double dp = 243.5*gamma / (17.62-gamma);
-//_____________________________________Checking for audio______________________________________________________
-
-          RS = analogRead(audio_signal);
-          RS = constrain(audio_signal, 150, 440); 
-          RS = map(audio_signal, 150, 440, 1023, 0);
-
-
-
-//______________________Reading the value of Pressure, Temperature, Altitude from the BMP180__________________
-
-  
-          float bp =  bmp.readPressure()/100; // Division by 100 makes it in millibars
-          
-          float ba =  bmp.readAltitude();
-          
-          float bt =  bmp.readTemperature();
-          
-          float dst = bmp.readSealevelPressure()/100;
-
- 
- 
-  
- //_______________Printing the valus of the above read value on to the Virtual Pins in the Bluynk App_____________
- 
-          Blynk.virtualWrite(V5 , h);
-          Blynk.virtualWrite(V6 , t);
-          Blynk.virtualWrite(V10, bp);
-          Blynk.virtualWrite(V11, ba);
-          Blynk.virtualWrite(V12, bt);
-          Blynk.virtualWrite(V13, dst);
-          Blynk.virtualWrite(V14, dp);
-          Blynk.virtualWrite(V15, RS);
-             
-}
-
-
-void setup()
-{
-  
-          Serial.begin(9600); //Initializing the Serial Monitor with a Baud Rate of 9600
-        
-          Blynk.begin(auth, ssid, pass);
-        
-          dht.begin();  //Initializing the DHT sensor
-          
-          Wire.begin(I2C_SDA, I2C_SCL); //Initializing the I2C connection
-          
-          delay(10);
-          
-          timer.setInterval(1000L, sendSensor);
-}
-
-void loop()
-{
-  Blynk.run();
-  timer.run();
-}
-
-
-
-/**
- *
- * HX711 library for Arduino - example file
- * https://github.com/bogde/HX711
- *
- * MIT License
- * (c) 2018 Bogdan Necula
- *
-**/
 #include "HX711.h"
-
-
-// HX711 circuit wiring
 const int LOADCELL_DOUT_PIN = 13;
 const int LOADCELL_SCK_PIN = 15;
-
-
 HX711 scale;
 
+#include "DHT.h"
+#define DHTPIN 14
+#define DHTTYPE DHT11   // DHT 11
+#include <Arduino.h>
+DHT dht(DHTPIN, DHTTYPE);
+
+#include <Wire.h>
+char auth[] = "zj0-ZLPzY8AMpaU5sDFU0fr3LQARTA1g"; //jayanth_alvas
+char ssid[] = "new1";
+char pass[] = "123456789";
+
+int status;
+
 void setup() {
-  Serial.begin(38400);
-  Serial.println("HX711 Demo");
+  Serial.begin(9600);
+  WiFi.begin(ssid, pass);
+  Blynk.config(auth);  // in place of Blynk.begin(auth, ssid, pass);
+  dht.begin();
 
   Serial.println("Initializing the scale");
-
-  // Initialize library with data output pin, clock input pin and gain factor.
-  // Channel selection is made by passing the appropriate gain:
-  // - With a gain factor of 64 or 128, channel A is selected
-  // - With a gain factor of 32, channel B is selected
-  // By omitting the gain factor parameter, the library
-  // default "128" (Channel A) is used here.
   scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
 
   Serial.println("Before setting up the scale:");
   Serial.print("read: \t\t");
-  Serial.println(scale.read());			// print a raw reading from the ADC
+  Serial.println(scale.read());      // print a raw reading from the ADC
 
   Serial.print("read average: \t\t");
-  Serial.println(scale.read_average(20));  	// print the average of 20 readings from the ADC
+  Serial.println(scale.read_average(20));   // print the average of 20 readings from the ADC
 
   Serial.print("get value: \t\t");
-  Serial.println(scale.get_value(5));		// print the average of 5 readings from the ADC minus the tare weight (not set yet)
+  Serial.println(scale.get_value(5));   // print the average of 5 readings from the ADC minus the tare weight (not set yet)
 
   Serial.print("get units: \t\t");
-  Serial.println(scale.get_units(5), 1);	// print the average of 5 readings from the ADC minus tare weight (not set) divided
-						// by the SCALE parameter (not set yet)
+  Serial.println(scale.get_units(5), 1);  // print the average of 5 readings from the ADC minus tare weight (not set) divided
+  // by the SCALE parameter (not set yet)
 
   scale.set_scale(428.f);    // 2280.f this value is obtained by calibrating the scale with known weights; see the README for details
-  scale.tare();				        // reset the scale to 0
+  scale.tare();               // reset the scale to 0
 
   Serial.println("After setting up the scale:");
 
@@ -176,22 +59,144 @@ void setup() {
   Serial.println(scale.read_average(20));       // print the average of 20 readings from the ADC
 
   Serial.print("get value: \t\t");
-  Serial.println(scale.get_value(5));		// print the average of 5 readings from the ADC minus the tare weight, set with tare()
+  Serial.println(scale.get_value(5));   // print the average of 5 readings from the ADC minus the tare weight, set with tare()
 
   Serial.print("get units: \t\t");
   Serial.println(scale.get_units(5), 1);        // print the average of 5 readings from the ADC minus tare weight, divided
-						// by the SCALE parameter set with set_scale
+  // by the SCALE parameter set with set_scale
 
   Serial.println("Readings:");
+
+  while (!Serial);
+  Wire.begin();
+  //begin() initializes the interface, checks the sensor ID and reads the calibration parameters.
+  if (!bmp180.begin())
+  {
+    Serial.println("begin() failed. check your BMP180 Interface and I2C Address.");
+    while (1);
+  }
+  //reset sensor to default parameters.
+  bmp180.resetToDefaults();
+  //enable ultra high resolution mode for pressure measurements
+  bmp180.setSamplingMode(BMP180MI::MODE_UHR);
 }
 
-void loop() {
-  Serial.print("one reading:\t");
-  Serial.println(scale.get_units(),0);
-  //Serial.print("\t| average:\t");
-  //Serial.println(scale.get_units(10), 1);
+int t1;
+int h1;
+int p1;
+int c1;
+int w1;
+int mail;
 
-  scale.power_down();			        // put the ADC in sleep mode
+void loop()
+{
+  sp();
+  c1 = analogRead(A0);
+  Blynk.virtualWrite(0, c1); //audio v0
+
+  w1 = scale.get_units(), 0;
+  Serial.print(String("w1: ") + w1);
+  Serial.println(" gms ");
+  Blynk.virtualWrite(10, w1); //weight v10
+  scale.power_down();  
   delay(5000);
   scale.power_up();
+
+  if (Serial.available() > 0) {
+    String input;
+    input = Serial.readStringUntil('\n');
+    if (input[0] == 'c') {
+      WiFi.begin(ssid, pass);
+      Serial.println("connecting...");
+    }
+    else if (input[0] == 'd') {
+      WiFi.disconnect();
+      Serial.println("disconnecting...");
+    }
+  }
+  if (WiFi.status() == WL_IDLE_STATUS) { // when not connected to a network, but powered on
+    // lcd.setCursor(-4, 3);
+    // lcd.print("WL_IDLE_STATUS");
+    Serial.println("WL_IDLE_STATUS");
+  }
+  else if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("WL_CONNECTED ");
+    Serial.println(WiFi.localIP());
+  }
+  else if (WiFi.status() == WL_NO_SSID_AVAIL) {
+    Serial.println("WL_NO_SSID_AVAIL");
+  }
+  else if (WiFi.status() == WL_CONNECT_FAILED) {
+    Serial.println("WL_CONNECT_FAILED");
+  }
+  else if (WiFi.status() == WL_CONNECTION_LOST) {
+    Serial.println("WL_CONNECTION_LOST");
+  }
+  else if (WiFi.status() == WL_DISCONNECTED) {
+    Serial.println("WL_DISCONNECTED");
+  }
+  else {
+    digitalWrite(BUILTIN_LED, HIGH);
+    Serial.print("unknown status: ");
+    Serial.println(WiFi.status());
+  }
+
+
+  if (!bmp180.measureTemperature())
+  {
+    Serial.println("could not start temperature measurement, is a measurement already running?");
+    return;
+  }
+
+  //wait for the measurement to finish. proceed as soon as hasValue() returned true.
+  do
+  {
+    delay(100);
+  } while (!bmp180.hasValue());
+
+  t1 = bmp180.getTemperature();
+  Blynk.virtualWrite(1, t1); //tempature V1
+
+  if (!bmp180.measurePressure())
+  {
+    Serial.println("could not start perssure measurement, is a measurement already running?");
+    return;
+  }
+  do
+  {
+    delay(100);
+  } while (!bmp180.hasValue());
+
+  p1 = bmp180.getPressure();
+  Blynk.virtualWrite(2, p1); //pressure v2
+
+  h1 = dht.readHumidity();
+  Blynk.virtualWrite(3, h1); //humidity v3
+
+  Blynk.run();
+  BLYNK_WRITE();
+
+  if (mail != 0) {
+    String body = String("Mail button pressed \r\nTemprature1") + t1 +
+                  "\r\nHumidity1:" + h1 +
+                  "\r\npreausure1:" + p1 +
+                  "Done";
+    Serial.println(String("Mail Sent...!" ) + body);
+    Blynk.email("ullas6558@gmail.com", "Report", body);
+  }
+}
+
+BLYNK_WRITE(V9) {
+  mail = param.asInt(); // button for mail v9
+}
+
+void sp() {
+  Serial.print(String("t1: ") + t1);
+  Serial.println(" degC");
+  Serial.print(String("p1: ") + p1);
+  Serial.println(" Pa");
+  Serial.print(String("h1: ") + h1);
+  Serial.println(" % ");
+  Serial.print(String("w1: ") + w1);
+  Serial.println(" gms ");
 }
