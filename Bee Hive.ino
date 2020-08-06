@@ -1,11 +1,12 @@
 //Bee_hive_28072020.ino
+//final 06082020 @5:55pm
+//https://learn.sparkfun.com/tutorials/bmp180-barometric-pressure-sensor-hookup-/all
 #define BLYNK_PRINT Serial
 #include <ESP8266WiFi.h>
 #include <BlynkSimpleEsp8266.h>
-#include <BMP180MI.h>
-#define I2C_ADDRESS 0x77
-BMP180I2C bmp180(I2C_ADDRESS);
-
+#define ALTITUDE 1090.0 // Altitude of SparkFun's HQ in Boulder, CO. in meters
+#include <SFE_BMP180.h>
+SFE_BMP180 pressure;
 #include "HX711.h"
 const int LOADCELL_DOUT_PIN = 13;
 const int LOADCELL_SCK_PIN = 15;
@@ -22,7 +23,51 @@ char auth[] = "zj0-ZLPzY8AMpaU5sDFU0fr3LQARTA1g"; //jayanth_alvas
 char ssid[] = "new1";
 char pass[] = "123456789";
 
+char statuss;
+double T, P, p0, a;
 int status;
+int t1;
+int h1;
+int p1;
+int c1;
+int w1;
+int t2;
+int h2;
+int p2;
+int c2;
+int w2;
+int mail;
+
+void sp() {
+  Serial.println("Server Board");
+
+  Serial.println();
+  Serial.print("provided altitude: ");
+  Serial.print(ALTITUDE, 0);
+  Serial.print(" meters, ");
+  Serial.print(ALTITUDE * 3.28084, 0);
+  Serial.println(" feet");
+
+
+  Serial.print(String("t1: ") + T);
+  Serial.println(" degC");
+  Serial.print(String("p1: ") + P);
+  Serial.println(" mb");
+  Serial.print(String("h1: ") + h1);
+  Serial.println(" % ");
+  Serial.print(String("w1: ") + w1);
+  Serial.println(" gms ");
+  Serial.println("Clint Board");
+  Serial.print(String("t2: ") + t2);
+  Serial.println(" degC");
+  Serial.print(String("p2: ") + p2);
+  Serial.println(" Pa");
+  Serial.print(String("h2: ") + h2);
+  Serial.println(" % ");
+  Serial.print(String("w2: ") + w2);
+  Serial.println(" gms ");
+  Serial.println("------------------------------------");
+}
 
 void setup() {
   Serial.begin(9600);
@@ -66,27 +111,15 @@ void setup() {
   // by the SCALE parameter set with set_scale
 
   Serial.println("Readings:");
-
-  while (!Serial);
-  Wire.begin();
-  //begin() initializes the interface, checks the sensor ID and reads the calibration parameters.
-  if (!bmp180.begin())
+  if (pressure.begin())
+    Serial.println("BMP180 init success");
+  else
   {
-    Serial.println("begin() failed. check your BMP180 Interface and I2C Address.");
-    while (1);
+    Serial.println("BMP180 init fail\n\n");
+    while (1); // Pause forever.
   }
-  //reset sensor to default parameters.
-  bmp180.resetToDefaults();
-  //enable ultra high resolution mode for pressure measurements
-  bmp180.setSamplingMode(BMP180MI::MODE_UHR);
-}
 
-int t1;
-int h1;
-int p1;
-int c1;
-int w1;
-int mail;
+}
 
 void loop()
 {
@@ -95,11 +128,9 @@ void loop()
   Blynk.virtualWrite(0, c1); //audio v0
 
   w1 = scale.get_units(), 0;
-  Serial.print(String("w1: ") + w1);
-  Serial.println(" gms ");
+
   Blynk.virtualWrite(10, w1); //weight v10
-  scale.power_down();  
-  delay(5000);
+  scale.power_down();
   scale.power_up();
 
   if (Serial.available() > 0) {
@@ -115,8 +146,6 @@ void loop()
     }
   }
   if (WiFi.status() == WL_IDLE_STATUS) { // when not connected to a network, but powered on
-    // lcd.setCursor(-4, 3);
-    // lcd.print("WL_IDLE_STATUS");
     Serial.println("WL_IDLE_STATUS");
   }
   else if (WiFi.status() == WL_CONNECTED) {
@@ -142,33 +171,57 @@ void loop()
   }
 
 
-  if (!bmp180.measureTemperature())
+
+  statuss = pressure.startTemperature();
+  if (statuss != 0)
   {
-    Serial.println("could not start temperature measurement, is a measurement already running?");
-    return;
+    delay(statuss);
+    statuss = pressure.getTemperature(T);
+    if (statuss != 0)
+    {
+      Serial.print("temperature: ");
+      Serial.println(T, 2);                                                                                   //T temprature
+      Serial.print((9.0 / 5.0)*T + 32.0, 2);
+      Serial.println(" deg F");
+      statuss = pressure.startPressure(3);
+      if (statuss != 0)
+      {
+        delay(statuss);
+        statuss = pressure.getPressure(P, T);
+        if (statuss != 0)
+        {
+          // Print out the measurement:
+          Serial.print("absolute pressure: ");
+          Serial.print(P, 2);                                                                               //P pressure
+          Serial.print(" mb, ");
+          Serial.print(P * 0.0295333727, 2);
+          Serial.println(" inHg");
+          p0 = pressure.sealevel(P, ALTITUDE); // we're at 1655 meters (Boulder, CO)
+          Serial.print("relative (sea-level) pressure: ");
+          Serial.print(p0, 2);                                                                             //p0 sea-level
+          Serial.print(" mb, ");
+          Serial.print(p0 * 0.0295333727, 2);
+          Serial.println(" inHg");
+          a = pressure.altitude(P, p0);
+          Serial.print("computed altitude: ");
+          Serial.print(a, 0);                                                                               
+          Serial.print(" meters, ");
+          Serial.print(a * 3.28084, 0);                                                                   //a altitude
+          Serial.println(" feet");
+        }
+        else Serial.println("error retrieving pressure measurement\n");
+      }
+      else Serial.println("error starting pressure measurement\n");
+    }
+    else Serial.println("error retrieving temperature measurement\n");
   }
+  else Serial.println("error starting temperature measurement\n");
 
-  //wait for the measurement to finish. proceed as soon as hasValue() returned true.
-  do
-  {
-    delay(100);
-  } while (!bmp180.hasValue());
 
-  t1 = bmp180.getTemperature();
-  Blynk.virtualWrite(1, t1); //tempature V1
-
-  if (!bmp180.measurePressure())
-  {
-    Serial.println("could not start perssure measurement, is a measurement already running?");
-    return;
-  }
-  do
-  {
-    delay(100);
-  } while (!bmp180.hasValue());
-
-  p1 = bmp180.getPressure();
-  Blynk.virtualWrite(2, p1); //pressure v2
+  Blynk.virtualWrite(1, T); //tempature V1
+  Blynk.virtualWrite(2, P); //pressure v2
+  Blynk.virtualWrite(15, p0); 
+  Blynk.virtualWrite(16, a); 
 
   h1 = dht.readHumidity();
   Blynk.virtualWrite(3, h1); //humidity v3
@@ -177,26 +230,35 @@ void loop()
   BLYNK_WRITE();
 
   if (mail != 0) {
-    String body = String("Mail button pressed \r\nTemprature1") + t1 +
-                  "\r\nHumidity1:" + h1 +
-                  "\r\npreausure1:" + p1 +
+    String body = String("Mail button pressed \r\nTemprature1:-") + T +
+                  "\r\nHumidity1:-" + h1 +
+                  "\r\npreausure1:-" + P +
+                  "\r\nrelative (sea-level) pressure:-" + p0 +
+                  "\r\ncomputed altitude:-" + a +
+                  
+                  "\r\nweight1:-" + w1 +
+                  "\r\nTemprature2:-" + t2 +
+                  "\r\nHumidity2:-" + h2 +
+                  "\r\npreausure2:-" + p2 +
+                  "\r\nweight2:-" + w2 +
                   "Done";
-    Serial.println(String("Mail Sent...!" ) + body);
-    Blynk.email("ullas6558@gmail.com", "Report", body);
+    Serial.println(String("Mail Sent...! to: jnandu3@gmail.com" ) + body);
+    Blynk.email("jnandu3@gmail.com", "Report : Bee Hive Monitorng System", body);
   }
 }
 
 BLYNK_WRITE(V9) {
   mail = param.asInt(); // button for mail v9
 }
-
-void sp() {
-  Serial.print(String("t1: ") + t1);
-  Serial.println(" degC");
-  Serial.print(String("p1: ") + p1);
-  Serial.println(" Pa");
-  Serial.print(String("h1: ") + h1);
-  Serial.println(" % ");
-  Serial.print(String("w1: ") + w1);
-  Serial.println(" gms ");
+BLYNK_WRITE(V20) {
+  t2 = param.asInt(); // button for mail v9
+}
+BLYNK_WRITE(V21) {
+  h2 = param.asInt(); // button for mail v9
+}
+BLYNK_WRITE(V22) {
+  p2 = param.asInt(); // button for mail v9
+}
+BLYNK_WRITE(V23) {
+  w2 = param.asInt(); // button for mail v9
 }
